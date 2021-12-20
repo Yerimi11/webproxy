@@ -135,7 +135,7 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
   sprintf(body, "%s<hr><em>The Tiny Web server</em>\r\n", body);
 
   /* Print the HTTP response */
-  sprintf(buf, "HTTP/1.0 %s %\r\n", errnum, shortmsg);
+  sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
   Rio_writen(fd, buf, strlen(buf));
   sprintf(buf, "Content-type: text/html\r\n");
   Rio_writen(fd, buf, strlen(buf));
@@ -211,7 +211,7 @@ void serve_static(int fd, char *filename, int filesize) {
   sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype); // 빈 줄 한 개가 헤더를 종료하고 있음
   
   /* writen = client 쪽에 */
-  Rio_writen(fd, buf, strlen(buf)); // 요청한 파일의 내용을 연결 식별자 fd로 복사해서 응답 본체를 보낸다
+  Rio_writen(fd, buf, strlen(buf)); // 요청한 파일의 내용을 연결 식별자 fd로 복사해서 응답 본체를 보낸다 // 버퍼를 옮김
   
   /* 서버 쪽에 출력 */
   printf("Response headers:\n"); 
@@ -220,15 +220,15 @@ void serve_static(int fd, char *filename, int filesize) {
   /* Send response body to client */
   srcfd = Open(filename, O_RDONLY, 0); // 열려고 하는 파일의 식별자 번호 리턴. filename을 오픈하고 식별자를 얻어온다
                                 // ㄴ 0 : 읽기 전용이기도하고, 새로 파일을 만드는게 아니니 Null처럼 없다는 의미..없어도 됨
-  srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); // mmap : 요청한 파일을 가상메모리 영역으로 매핑한다
-  // mmap 호출시 위에서 받아온 모든 요청 정보들(srcfd)을 전부 매핑해서 srcp로 받는다(포인터)
-  Close(srcfd); // srcfd 내용을 메모리로 매핑한 후에 더 이상 이 식별자 필요X, 파일을 닫는다. 안 닫으면 메모리 누수 치명적
-  Rio_writen(fd, srcp, filesize); // 실제로 파일을 클라이언트에게 전송. // srcp내용을 fd에 filesize만큼 복사해서 넣는다
-  Munmap(srcp, filesize); // 매핑된 srcp 주소를 반환한다. 치명적인 메모리 누수를 피한다 
-  // mmap-munmap은 malloc-free처럼 세트
+  // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); // mmap : 요청한 파일을 가상메모리 영역으로 매핑한다
+  // // mmap 호출시 위에서 받아온 모든 요청 정보들(srcfd)을 전부 매핑해서 srcp로 받는다(포인터)
+  // Close(srcfd); // srcfd 내용을 메모리로 매핑한 후에 더 이상 이 식별자 필요X, 파일을 닫는다. 안 닫으면 메모리 누수 치명적
+  // Rio_writen(fd, srcp, filesize); // 실제로 파일을 클라이언트에게 전송. // srcp내용을 fd에 filesize만큼 복사해서 넣는다
+  // Munmap(srcp, filesize); // 매핑된 srcp 주소를 반환한다. 치명적인 메모리 누수를 피한다 
+  // // mmap-munmap은 malloc-free처럼 세트
   
   /* 숙제문제 11.9 */ // 실행시 위에 srcp부터 ~ Munmap 까지 주석처리 할 것
-  fbuf = malloc(filesize); //filesize 만큼의 가상 메모리(힙)를 할당한 후(malloc은 아무것도 없는 빈 상태에서 시작) , Rio_readn 으로 할당된 가상 메모리 공간의 시작점인 fbuf를 기준으로 srcfd 파일을 읽어 복사해넣는다.
+  fbuf = (char *)malloc(filesize); //filesize 만큼의 가상 메모리(힙)를 할당한 후(malloc은 아무것도 없는 빈 상태에서 시작) , Rio_readn 으로 할당된 가상 메모리 공간의 시작점인 fbuf를 기준으로 srcfd 파일을 읽어 복사해넣는다.
   Rio_readn(srcfd, fbuf, filesize); // srcfd 내용을 fbuf에 넣는다(버퍼에 채워줌)
   Close(srcfd); // 윗줄 실행 후 필요 없어져서 닫아준다 // 양 쪽 모두 생성한 파일 식별자 번호인 srcfd 를 Close() 해주고
   Rio_writen(fd, fbuf, filesize); // Rio_writen 함수 (시스템 콜) 을 통해 클라이언트에게 전송한다 

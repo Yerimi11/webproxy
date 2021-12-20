@@ -20,8 +20,8 @@ if ((buf = getenv("QUERY_STRING")) != NULL) {
   // strcpy(arg2, p+1);
   // n1 = atoi(arg1);
   // n2 = atoi(arg2);
-  sscanf(buf, "Num1 = %d", &n1);
-  sscanf(p+1, "Num2 = %d", &n2);
+  sscanf(buf, "first=%d", &n1);
+  sscanf(p+1, "second=%d", &n2);
 }
 
   /* Make the response body */
