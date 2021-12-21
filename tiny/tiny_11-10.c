@@ -100,7 +100,7 @@ void doit(int fd) { /* 한 개의 HTTP 트랜잭션을 처리 */
   sscanf(buf, "%s %s %s", method, uri, version);
   printf("Get image file uri : %s\n", uri); // 추가코드
                       // GET이거나 HEAD도 아닐 때 /* 숙제 11.11 */
-  if (strcasecmp(method, "GET") && strcasecmp(method, "HEAD")) { // 같으면 0반환이라 if문 안들어감 // Tiny는 GET메소드만 지원. 만약 다른 메소드(like POST)를 요청하면. strcasecmp : 문자열비교.
+  if (strcasecmp(method, "GET")) { // 같으면 0반환이라 if문 안들어감 // Tiny는 GET메소드만 지원. 만약 다른 메소드(like POST)를 요청하면. strcasecmp : 문자열비교.
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method"); // 에러메시지 보내고, main루틴으로 돌아온다
     return; // 그 후 연결 닫고 다음 요청 기다림. 그렇지 않으면 읽어들이고
   }
@@ -225,9 +225,6 @@ void serve_static(int fd, char *filename, int filesize, char *method) {
   printf("Response headers:\n"); 
   printf("%s", buf);
 
-  if (!strcasecmp(method, "HEAD")) // 같으면 0(false). 다를 때 if문 안으로 들어감
-    return; // void 타입이라 바로 리턴해도 됨(끝내라)
-
   /* Send response body to client */
   srcfd = Open(filename, O_RDONLY, 0); // 열려고 하는 파일의 식별자 번호 리턴. filename을 오픈하고 식별자를 얻어온다
                                 // ㄴ 0 : 읽기 전용이기도하고, 새로 파일을 만드는게 아니니 Null처럼 없다는 의미..없어도 됨
@@ -276,9 +273,6 @@ void serve_dynamic(int fd, char *filename, char *cgiargs, char *method) {
   Rio_writen(fd, buf, strlen(buf));  // fd에 버퍼 넣는다
   sprintf(buf, "Server: Tiny Web Server\r\n");
   Rio_writen(fd, buf, strlen(buf));
-
-  if (!strcasecmp(method, "HEAD")) // 같으면 0(false). 다를 때 if문 안으로 들어감
-    return; // void 타입이라 바로 리턴해도 됨(끝내라)
 
   // 응답의 첫 번째 부분을 보낸 후, 새로운 자식 프로세스를 fork한다
   if (Fork() == 0) { /* Child */ 
