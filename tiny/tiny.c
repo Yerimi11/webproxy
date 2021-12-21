@@ -94,12 +94,12 @@ void doit(int fd) { /* 한 개의 HTTP 트랜잭션을 처리 */
   /* Rio = Robust I/O */
   // rio_t 구조체를 초기화 해준다.
   Rio_readinitb(&rio, fd); // 요청 라인 읽어들임 // rio버퍼와 fd. 서버의 connfd를 연결시킨다
-  Rio_readlineb(&rio, buf, MAXLINE); // 요청 라인 읽고 분석 // rio에 있는 string한 줄을 버퍼로 다 옮긴다
+  Rio_readlineb(&rio, buf, MAXLINE); // 요청 라인 읽고 분석, rio에 있는 string을 버퍼로 다 옮긴다
   printf("Request headers:\n");
   printf("%s", buf); // 우리가 요청한 자료를 표준 출력 해준다 (godzilla)
   sscanf(buf, "%s %s %s", method, uri, version);
   printf("Get image file uri : %s\n", uri); // 추가코드
-                      // GET이거나 HEAD도 아닐 때 /* 숙제 11.11 */
+      // 같은 문자가 아닐 때 조건문   // GET이거나 HEAD도 아닐 때 /* 숙제 11.11 */
   if (strcasecmp(method, "GET") && strcasecmp(method, "HEAD")) { // 같으면 0반환이라 if문 안들어감 // Tiny는 GET메소드만 지원. 만약 다른 메소드(like POST)를 요청하면. strcasecmp : 문자열비교.
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method"); // 에러메시지 보내고, main루틴으로 돌아온다
     return; // 그 후 연결 닫고 다음 요청 기다림. 그렇지 않으면 읽어들이고
@@ -107,7 +107,7 @@ void doit(int fd) { /* 한 개의 HTTP 트랜잭션을 처리 */
 
   read_requesthdrs(&rio); // GET method라면(0) 그건 읽고, 다른 요청 헤더들은 무시 (그냥 프린트한다)
 
-  /* Parse URI from GET request */
+  /* Parse URI from GET request */ // uri 받은거 분석하는데 이게 정적 컨텐츠이면 1이 나옴 -> 밑에 2번째 if문으로 들감
   is_static = parse_uri(uri, filename, cgiargs); // URI를 파일 이름과, 비어있을 수도 있는 CGI인자 스트링 분석하고 // 정적이면 1 // 파일네임 여기서 prase_uri를 통해 만들어냄 (매개변수처럼..담는 그릇)
   if (stat(filename, &sbuf) < 0) { // 요청이 정적 또는 동적 컨텐츠를 위한 것인지 나타내는 플래그 설정 // 버퍼에 파일네임을 넘긴다
     clienterror(fd, filename, "404", "Not found", "Tiny couldn't find this file"); 
@@ -136,8 +136,9 @@ void doit(int fd) { /* 한 개의 HTTP 트랜잭션을 처리 */
  * 브라우저 사용자에게 에러를 설명하는 응답 본체에 HTML 파일도 함께 보낸다. */
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg) {
   char buf[MAXLINE], body[MAXBUF];
+  // clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
 
-  /* Build the HTTP response boy */ 
+  /* Build the HTTP response body */ 
   sprintf(body, "<html><title>Tiny Error</title>");
   sprintf(body, "%s<body bgcolor=""ffffff"">\r\n", body);
   sprintf(body, "%s%s: %s\r\n", body, errnum, shortmsg);
@@ -146,7 +147,7 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
 
   /* Print the HTTP response */
   sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
-  Rio_writen(fd, buf, strlen(buf));
+  Rio_writen(fd, buf, strlen(buf)); // buf를 fd에 (위에 클라에서 준 걸 썼으니까 다시 파일 식별자로 보내서 돌려줌)
   sprintf(buf, "Content-type: text/html\r\n");
   Rio_writen(fd, buf, strlen(buf));
   sprintf(buf, "Content-length: %d\r\n\r\n", (int)strlen(body));
@@ -154,14 +155,14 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
   Rio_writen(fd, body, strlen(body));
 }
 
-/* 요청 헤더를 읽고 무시한다 */
+/* 요청 헤더를 읽고 무시한다 */ // doit에서 GET 구분할 때 사용됨
 void read_requesthdrs(rio_t *rp) {
   char buf[MAXLINE];
 
   Rio_readlineb(rp, buf, MAXLINE);
 
   /* strcmp 두 문자열을 비교하는 함수 */
-  /* 헤더의 마지막 줄은 비어있기에 \r\n만 buf에 담겨있다면 while문을 탈출한다 */
+  /* 헤더의 마지막 줄은 비어있기에 \r\n만 buf에 담겨있다면 while문을 탈출한다 */ //버퍼 rp의 마지막 끝을 만날 때까지
   while(strcmp(buf, "\r\n")) {
 
     // rio_readlineb는 \n을 만날 때 멈춘다
@@ -175,16 +176,29 @@ void read_requesthdrs(rio_t *rp) {
 int parse_uri(char *uri, char *filename, char *cgiargs) {
   char *ptr;
 
-  /* strstr 으로 cgi-bin이 들어있는지 확인하고 양수값을 리턴하면 dynamic content를 요구하는 것이기에 조건문을 탈출 */
+  /* uri에 cgi-bin이 없다면, 즉 정적 컨텐츠를 요청한다면 1을 리턴한다.*/
+  // 예시 : GET /godzilla.jpg HTTP/1.1 -> uri에 cgi-bin이 없다
+  /* strstr 으로 cgi-bin이 들어있는지 확인하고 아니면0인데 양수값을 리턴하면 dynamic content를 요구하는 것이기에 조건문을 탈출 */
   if(!strstr(uri, "cgi-bin")) { /* Static content */ // 만일 요청이 정적 컨텐츠를 위한 것이라면
-    strcpy(cgiargs, ""); // CGI 인자 스트링을 지우고
+    strcpy(cgiargs, ""); // CGI 인자 스트링은 아무것도 없다
     strcpy(filename, "."); // URI를 ./index.html같은 상대 리눅스 경로 이름으로 바꾼다
-    strcat(filename, uri);
+    strcat(filename, uri); // filename에 uri 이어붙인다
     //결과 cgiargs = "" 공백 문자열, filename = "./~~ or ./home.html
 
+     /* 예시
+      uri : /godzilla.jpg
+      ->
+      cgiargs : 
+      filename : ./godzilla.jpg
+    */
+
     if (uri[strlen(uri)-1] == '/') // 만일 URI가 '/'로 끝난다면
-      strcat(filename, "home.html"); // 기본 파일 이름(home.html)을 filename에 추가한다
-    return 1;
+      strcat(filename, "home.html"); // 그 뒤에 기본 파일 이름(home.html)을 filename에 추가한다 -> 해당 이름의 정적컨텐츠가 출력된다
+    return 1; // 정적컨텐츠 1 리턴
+
+    // 만약 uri뒤에 '/'이 있다면 그 뒤에 home.html을 붙인다.
+    // 내가 브라우저에 http://localhost:8000만 입력하면 바로 뒤에 '/'이 생기는데,
+    // '/' 뒤에 home.html을 붙여 해당 위치 해당 이름의 정적 컨텐츠가 출력된다.
   }
 
   // uri 예시: dynamic: /cgi-bin/adder?first=1213&second=1232 
@@ -202,24 +216,33 @@ int parse_uri(char *uri, char *filename, char *cgiargs) {
     
     strcpy(filename, "."); // 나머지 URI 부분을 상대 리눅스 파일 이름으로 변환한다
     strcat(filename, uri); // 이어붙이는 함수. 파일네임에 uri를 붙인다
-    return 0;
+
+        /* 예시
+      uri : /cgi-bin/adder?123&123
+      ->
+      cgiargs : 123&123
+      filename : ./cgi-bin/adder
+    */
+
+    return 0; // 동적 컨텐츠.
   }
 }
 
 
 /* 지역 파일의 내용을 포함하고 있는 본체를 갖는 HTTP 응답을 보낸다 */
+// 클라이언트가 원하는 파일 디렉토리를 받아온다. 응답 라인과 헤더를 작성하고 서버에게 보낸다. serve~
 void serve_static(int fd, char *filename, int filesize, char *method) {
   int srcfd;
   char *srcp, filetype[MAXLINE], buf[MAXBUF], *fbuf;
 
   /* Send response headers to client */
   get_filetype(filename, filetype); // 파일 이름의 접미어 부분 검사해서 파일 타입 결정
-  sprintf(buf, "HTTP/1.0 200 OK\r\n"); // 클라이언트에 응답 줄과 응답 헤더를 보낸다
+  sprintf(buf, "HTTP/1.0 200 OK\r\n"); // 클라이언트에 응답 줄과 응답 헤더를 보낸다 // 버퍼에 넣고 출력
   sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
   sprintf(buf, "%sConnection: close\r\n", buf);
   sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
   sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype); // 빈 줄 한 개가 헤더를 종료하고 있음
-  /* writen = client 쪽에 */
+  /* writen = client(텔넷)에서 출력됨*/
   Rio_writen(fd, buf, strlen(buf)); // 요청한 파일의 내용을 연결 식별자 fd로 복사해서 응답 본체를 보낸다 // 버퍼를 옮김
   /* 서버 쪽에 출력 */
   printf("Response headers:\n"); 
@@ -248,7 +271,7 @@ void serve_static(int fd, char *filename, int filesize, char *method) {
 }
 
 /*
- * get_filetype - Derive file type from filename
+ * get_filetype - Derive(파생) file type from filename
  * strstr 두번째 인자가 첫번째 인자에 들어있는지 확인한다
  */
 void get_filetype(char *filename, char *filetype) {
@@ -267,6 +290,7 @@ void get_filetype(char *filename, char *filetype) {
     strcpy(filetype, "text/plain");
 }
 
+/* Tiny는 자식 프로세스 fork후, CGI프로그램을 자식의 컨텍스트에서 실앻ㅇ하며 모든 종류의 동적 컨텐츠를 제공함 */
 void serve_dynamic(int fd, char *filename, char *cgiargs, char *method) {
   char buf[MAXLINE], *emptylist[] = { NULL };
 
@@ -281,11 +305,19 @@ void serve_dynamic(int fd, char *filename, char *cgiargs, char *method) {
     return; // void 타입이라 바로 리턴해도 됨(끝내라)
 
   // 응답의 첫 번째 부분을 보낸 후, 새로운 자식 프로세스를 fork한다
-  if (Fork() == 0) { /* Child */ 
+  if (Fork() == 0) { /* Child */ // 0 : 정삭적으로 fork됨. 함수보면 <0이면 에러임
     /* Real server would set all CGI vars here */
+
     // cgiargs에 arguments 2개가 들어있음 (parse에서 물음표 기준으로 2개로 나눴음 strcpy)
-    setenv("QUERY_STRING", cgiargs, 1); // 환경변수 설정. QUERY_STRING 환경변수를 요청 URI의 CGI인자들로 초기화한다
-    Dup2(fd, STDOUT_FILENO); /* Redirect stdout to client */ // 자식의 표준 출력을 연결 파일 식별자로 재지정
+    /* 예시
+    uri : /cgi-bin/adder?123&123
+    ->
+    cgiargs : 123&123
+    filename : ./cgi-bin/adder */
+
+    // fork한 곳에서 set env 바꿔줌
+    setenv("QUERY_STRING", cgiargs, 1); // 환경변수 설정. QUERY_STRING이라는 환경변수에 요청 URI의 CGI인자들(cgiargs)로 설정해준다. 1 : 우선순위 순서
+    Dup2(fd, STDOUT_FILENO); /* Redirect stdout to client */ // 자식의 표준 출력을 연결 파일 식별자로 재지정 // fd를 STDOUT자리로 복사(자식에게 복사)
     Execve(filename, emptylist, environ); /* Run CGI program */ // 그 후 CGI프로그램 로드 후 실행
   }
   Wait(NULL); /* Parent waits for and reaps child */ // 부모는 자식이 종료되어 정리되는 것을 기다리기 위해 wait 함수에서 블록된다(대기하는 함수)
