@@ -21,7 +21,7 @@ void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs, char *method);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 
-int main(int argc, char **argv) { // argc : 옵션의 개수, argv : 옵션 문자열의 배열(내가 입력하는 스트링 : ./tiny 8000) 
+int main(int argc, char **argv) { // argc : 옵션의 개수(arg count), argv : 옵션 문자열의 배열(내가 입력하는 스트링 : ./tiny 8000) 
   // 인자 갯수 모를때.. (int argc, char **argv)세트로 씀 // argv가 스트링의 배열이고 *argv일때 0번째 스트링을 가리킴, 스트링이 char *
   int listenfd, connfd;
   char hostname[MAXLINE], port[MAXLINE]; // 크기를 모르니까 맥스로 받음
@@ -93,14 +93,14 @@ void doit(int fd) { /* 한 개의 HTTP 트랜잭션을 처리 */
   /* Read request line and headers */  
   /* Rio = Robust I/O */
   // rio_t 구조체를 초기화 해준다.
-  Rio_readinitb(&rio, fd); // 요청 라인 읽어들임 // rio버퍼와 fd. 서버의 connfd를 연결시킨다
+  Rio_readinitb(&rio, fd); // 요청 라인 읽어들임(컴터시스템 p.921-4line) // rio버퍼와 fd. 서버의 connfd를 연결시킨다
   Rio_readlineb(&rio, buf, MAXLINE); // 요청 라인 읽고 분석, rio에 있는 string을 버퍼로 다 옮긴다
   printf("Request headers:\n");
   printf("%s", buf); // 우리가 요청한 자료를 표준 출력 해준다 (godzilla)
   sscanf(buf, "%s %s %s", method, uri, version);
   printf("Get image file uri : %s\n", uri); // 추가코드
       // 같은 문자가 아닐 때 조건문   // GET이거나 HEAD도 아닐 때 /* 숙제 11.11 */
-  if (strcasecmp(method, "GET") && strcasecmp(method, "HEAD")) { // 같으면 0반환이라 if문 안들어감 // Tiny는 GET메소드만 지원. 만약 다른 메소드(like POST)를 요청하면. strcasecmp : 문자열비교.
+  if (strcasecmp(method, "GET") && strcasecmp(method, "HEAD")) { // 같으면 0반환이라 if문 안들어감 1은 true라 에러실행 // Tiny는 GET메소드만 지원. 만약 다른 메소드(like POST)를 요청하면. strcasecmp : 문자열비교.
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method"); // 에러메시지 보내고, main루틴으로 돌아온다
     return; // 그 후 연결 닫고 다음 요청 기다림. 그렇지 않으면 읽어들이고
   }
@@ -156,10 +156,10 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
 }
 
 /* 요청 헤더를 읽고 무시한다 */ // doit에서 GET 구분할 때 사용됨
-void read_requesthdrs(rio_t *rp) {
+void read_requesthdrs(rio_t *rp) { // 헤더만 뽑아낼 때 rp를 씀
   char buf[MAXLINE];
 
-  Rio_readlineb(rp, buf, MAXLINE);
+  Rio_readlineb(rp, buf, MAXLINE); // 헤더만 빼고(요청라인 빼고) 그 다음꺼 다 출력한다.
 
   /* strcmp 두 문자열을 비교하는 함수 */
   /* 헤더의 마지막 줄은 비어있기에 \r\n만 buf에 담겨있다면 while문을 탈출한다 */ //버퍼 rp의 마지막 끝을 만날 때까지
@@ -248,7 +248,7 @@ void serve_static(int fd, char *filename, int filesize, char *method) {
   printf("Response headers:\n"); 
   printf("%s", buf);
 
-  if (!strcasecmp(method, "HEAD")) // 같으면 0(false). 다를 때 if문 안으로 들어감
+  if (!strcasecmp(method, "HEAD")) // 같으면 0(false) 들어가고 끝냄(HEAD가 맞으면)
     return; // void 타입이라 바로 리턴해도 됨(끝내라)
 
   /* Send response body to client */
@@ -301,7 +301,7 @@ void serve_dynamic(int fd, char *filename, char *cgiargs, char *method) {
   sprintf(buf, "Server: Tiny Web Server\r\n");
   Rio_writen(fd, buf, strlen(buf));
 
-  if (!strcasecmp(method, "HEAD")) // 같으면 0(false). 다를 때 if문 안으로 들어감
+  if (!strcasecmp(method, "HEAD")) // 같으면 0(false) 들어가고 끝냄(HEAD가 맞으면)
     return; // void 타입이라 바로 리턴해도 됨(끝내라)
 
   // 응답의 첫 번째 부분을 보낸 후, 새로운 자식 프로세스를 fork한다
