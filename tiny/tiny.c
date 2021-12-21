@@ -100,7 +100,7 @@ void doit(int fd) { /* 한 개의 HTTP 트랜잭션을 처리 */
   sscanf(buf, "%s %s %s", method, uri, version);
   printf("Get image file uri : %s\n", uri); // 추가코드
       // 같은 문자가 아닐 때 조건문   // GET이거나 HEAD도 아닐 때 /* 숙제 11.11 */
-  if (strcasecmp(method, "GET") && strcasecmp(method, "HEAD")) { // 같으면 0반환이라 if문 안들어감 1은 true라 에러실행 // Tiny는 GET메소드만 지원. 만약 다른 메소드(like POST)를 요청하면. strcasecmp : 문자열비교.
+  if (strcasecmp(method, "GET") && strcasecmp(method,  "HEAD")) { // 같으면 0반환이라 if문 안들어감 1은 true라 에러실행 // Tiny는 GET메소드만 지원. 만약 다른 메소드(like POST)를 요청하면. strcasecmp : 문자열비교.
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method"); // 에러메시지 보내고, main루틴으로 돌아온다
     return; // 그 후 연결 닫고 다음 요청 기다림. 그렇지 않으면 읽어들이고
   }
@@ -116,8 +116,8 @@ void doit(int fd) { /* 한 개의 HTTP 트랜잭션을 처리 */
   }
 
   if (is_static) { /* Serve static content */ // 만일 요청이 정적 컨텐츠를 위한 것이라면
-    if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) { // 이 파일이 보통 파일이라는 것과 읽기 권한을 갖고 있는지를 검증한다.
-      // sbuf.st_mode : sbuf의 내용 중 st_mode의 값(어떤 타입의 파일인지)
+    if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) { // 이 파일이 보통 파일이라는 것과 읽기 권한을 갖고 있는지를 검증한다. 맞으면1, 아니면0
+      // sbuf.st_mode : sbuf의 내용 중 st_mode의 값(어떤 타입의 파일인지 16바이트로 나옴)
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
       return;
     }
@@ -159,7 +159,7 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
 void read_requesthdrs(rio_t *rp) { // 헤더만 뽑아낼 때 rp를 씀
   char buf[MAXLINE];
 
-  Rio_readlineb(rp, buf, MAXLINE); // 헤더만 빼고(요청라인 빼고) 그 다음꺼 다 출력한다.
+  Rio_readlineb(rp, buf, MAXLINE); // 헤더만 다 읽고 첫 줄뺌(요청라인 빼고), 그 다음 while 들어가서 다 출력한다.
 
   /* strcmp 두 문자열을 비교하는 함수 */
   /* 헤더의 마지막 줄은 비어있기에 \r\n만 buf에 담겨있다면 while문을 탈출한다 */ //버퍼 rp의 마지막 끝을 만날 때까지
@@ -179,7 +179,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs) {
   /* uri에 cgi-bin이 없다면, 즉 정적 컨텐츠를 요청한다면 1을 리턴한다.*/
   // 예시 : GET /godzilla.jpg HTTP/1.1 -> uri에 cgi-bin이 없다
   /* strstr 으로 cgi-bin이 들어있는지 확인하고 아니면0인데 양수값을 리턴하면 dynamic content를 요구하는 것이기에 조건문을 탈출 */
-  if(!strstr(uri, "cgi-bin")) { /* Static content */ // 만일 요청이 정적 컨텐츠를 위한 것이라면
+  if(!strstr(uri, "cgi-bin")) { /* Static content */ // 만일 uri에 cgi-bin 이라는 폴더 내용이 없으면 -> 요청이 정적 컨텐츠를 위한 것이라면
     strcpy(cgiargs, ""); // CGI 인자 스트링은 아무것도 없다
     strcpy(filename, "."); // URI를 ./index.html같은 상대 리눅스 경로 이름으로 바꾼다
     strcat(filename, uri); // filename에 uri 이어붙인다
@@ -254,14 +254,18 @@ void serve_static(int fd, char *filename, int filesize, char *method) {
   /* Send response body to client */
   srcfd = Open(filename, O_RDONLY, 0); // 열려고 하는 파일의 식별자 번호 리턴. filename을 오픈하고 식별자를 얻어온다
                                 // ㄴ 0 : 읽기 전용이기도하고, 새로 파일을 만드는게 아니니 Null처럼 없다는 의미..없어도 됨
-  // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); // mmap : 요청한 파일을 가상메모리 영역으로 매핑한다
+  // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); // mmap : 요청한 파일을 가상메모리 영역으로 매핑한다 / 커널 내부 주소 접근 시에 사용
   // // mmap 호출시 위에서 받아온 모든 요청 정보들(srcfd)을 전부 매핑해서 srcp로 받는다(포인터)
   // Close(srcfd); // srcfd 내용을 메모리로 매핑한 후에 더 이상 이 식별자 필요X, 파일을 닫는다. 안 닫으면 메모리 누수 치명적
   // Rio_writen(fd, srcp, filesize); // 실제로 파일을 클라이언트에게 전송. // srcp내용을 fd에 filesize만큼 복사해서 넣는다
   // Munmap(srcp, filesize); // 매핑된 srcp 주소를 반환한다. 치명적인 메모리 누수를 피한다 
-  // // mmap-munmap은 malloc-free처럼 세트
-  
-  /* 숙제문제 11.9 */ // 실행시 위에 srcp부터 ~ Munmap 까지 주석처리 할 것
+
+  // // mmap-munmap은 malloc-free처럼 세트 / malloc()은, 큰 메모리 블럭 요청이 들어오면, 내부적으로 mmap()을 써서 메모리를 할당합니다. 포함은 X
+  // mmap()은 시스템에서 제공하는 저수준 시스템 콜이며, 특별한 조건일 때, (malloc과 유사하게) 메모리를 할당하는 효과를 볼 수 있습니다. 
+  // malloc()은 메모리를 할당하는 C library function이며, 내부적으로 mmap(), brk() 등의 시스템 콜을 써서 구현될 수 있습니다.
+  // mmap 공간을 잡는 동시에 내용을 넣음 free시 시스템에 즉각 반영
+
+  /* 숙제문제 11.9 */ // 실행시 위에 srcp부터 ~ Munmap 까지 주석처리 할 것 // 빈공간 할당하고 내용 넣음(Read를 해줘야함) free시 시스템에 즉각반영되지 않음
   fbuf = malloc(filesize); //filesize 만큼의 가상 메모리(힙)를 할당한 후(malloc은 아무것도 없는 빈 상태에서 시작) , Rio_readn 으로 할당된 가상 메모리 공간의 시작점인 fbuf를 기준으로 srcfd 파일을 읽어 복사해넣는다.
   Rio_readn(srcfd, fbuf, filesize); // srcfd 내용을 fbuf에 넣는다(버퍼에 채워줌)
   Close(srcfd); // 윗줄 실행 후 필요 없어져서 닫아준다 // 양 쪽 모두 생성한 파일 식별자 번호인 srcfd 를 Close() 해주고
