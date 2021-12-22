@@ -44,7 +44,7 @@ typedef struct
   char cache_obj[MAX_OBJECT_SIZE];
   char cache_url[MAXLINE];
   int LRU; // least recently used 가장 덜 사용한 것 (캐시에서 삭제할 때)
-  int isEmpty;
+  int isEmpty; // empty인지 아닌지 체크
 
   int readCnt;  // count of readers
   sem_t wmutex;  // protects accesses to cache 세마포어 타입
@@ -124,16 +124,17 @@ void doit(int connfd) {
     return;
   }
   
-  char url_store[100];
+  char url_store[100]; // 아직 doit 함수 ㅎㅎ
   strcpy(url_store, uri);
 
   // the url is cached?
   int cache_index;
   // in cache then return the cache content
   if ((cache_index=cache_find(url_store)) != -1) {
-    readerPre(cache_index); // 열어줌
+    readerPre(cache_index); // 열어줌 0->1
     Rio_writen(connfd, cache.cacheobjs[cache_index].cache_obj, strlen(cache.cacheobjs[cache_index].cache_obj));
-    readerAfter(cache_index); // 닫아줌
+    // 캐시에서 찾은 값 바로 보냄
+    readerAfter(cache_index); // 닫아줌 1->0
     return;
   }
   
@@ -158,12 +159,12 @@ void doit(int connfd) {
   // recieve message from end server and send to the client
   char cachebuf[MAX_OBJECT_SIZE];
   int sizebuf = 0;
-  size_t n;
+  size_t n; // 캐시에 없을 때 찾아주는 과정?
   while ((n=Rio_readlineb(&server_rio, buf, MAXLINE)) != 0) {
     // printf("proxy received %ld bytes, then send\n", n);
     sizebuf += n;
     if (sizebuf < MAX_OBJECT_SIZE) // 작으면 response 내용을 적어놈
-      strcat(cachebuf, buf);
+      strcat(cachebuf, buf); // buf에 response값 다 이어붙혀놓음(캐시내용)
     Rio_writen(connfd, buf, n);
   }
   Close(end_serverfd);
@@ -190,9 +191,9 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
       continue;
     }
 
-    if (!strncasecmp(buf, connection_key, strlen(connection_key))
-      && !strncasecmp(buf, proxy_connection_key, strlen(proxy_connection_key))
-      && !strncasecmp(buf, user_agent_key, strlen(user_agent_key))) {
+    if (strncasecmp(buf, connection_key, strlen(connection_key))
+        &&strncasecmp(buf, proxy_connection_key, strlen(proxy_connection_key))
+        &&strncasecmp(buf, user_agent_key, strlen(user_agent_key))) {
         strcat(other_hdr, buf);
       }
   }
@@ -249,12 +250,12 @@ void cache_init() {
   int i;
   for (i=0; i<CACHE_OBJS_COUNT; i++) {
     cache.cacheobjs[i].LRU = 0; // 처음이니까
-    cache.cacheobjs[i].isEmpty = 1; // 1, 0으로 캐시 엠티인지 구분?
+    cache.cacheobjs[i].isEmpty = 1; // 1이 비어있다는 뜻
 
     // Sem_init 첫 번째 인자: 초기화할 세마포어의 포인터
     // 두 번째: 0 - 쓰레드들끼리 세마포어 공유, 그 외 - 프로세스 간 공유
     // 세 번째: 초기 값
-    Sem_init(&cache.cacheobjs[i].wmutex, 0, 1); // write mutex
+    Sem_init(&cache.cacheobjs[i].wmutex, 0, 1); // write mutex / 초깃값 / 0은 쓰레드 나머지는 프로세스?
     Sem_init(&cache.cacheobjs[i].rdcntmutex, 0, 1); // read count mutex
     // ㄴ flag 지정
     cache.cacheobjs[i].readCnt = 0; // init이니까 0
