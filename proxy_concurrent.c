@@ -22,7 +22,7 @@ void doit(int connfd);
 void parse_uri(char *uri, char *hostname, char *path, int *port);
 void build_http_header(char *http_header, char *hostname, char *path, int port, rio_t *client_rio);
 int connect_endServer(char *hostname, int port, char *http_header);
-void *thread(void *vargsp);
+void *thread(void *vargsp); // 추가된 코드
 
 
 int main(int argc, char **argv){
@@ -30,7 +30,7 @@ int main(int argc, char **argv){
   socklen_t clientlen;
   char hostname[MAXLINE], port[MAXLINE];
   struct sockaddr_storage clientaddr;
-  pthread_t tid;
+  pthread_t tid; // 추가된 코드
 
   if (argc != 2){
     fprintf(stderr, "usage :%s <port> \n", argv[0]);
@@ -49,23 +49,28 @@ int main(int argc, char **argv){
     // doit(connfd);
     // Close(connfd);
 
-    // 첫 번째 인자 *thread: 쓰레드 식별자
-    // 두 번째: 쓰레드 특성 지정 (기본: NULL)
-    // 세 번째: 쓰레드 함수
-    // 네 번째: 쓰레드 함수의 매개변수
-    Pthread_create(&tid, NULL, thread, (void *)connfd);
+    // 첫 번째 인자 *thread: 쓰레드 식별자. 쓰레드마다 번호 줌
+    // 두 번째: 쓰레드 특성(속성) 지정 (기본: NULL)
+    // 세 번째: 쓰레드 함수 (쓰레드가 하고픈 일을 function으로 만들어 넣음)
+    // 네 번째: 쓰레드 함수의 매개변수 (그 function에 넣는 인자)
+    Pthread_create(&tid, NULL, thread, (void *)connfd); // 추가된 코드
   }
   return 0;
 }
 
-void *thread(void *vargs) {
-  int connfd = (int)vargs;
-  Pthread_detach(pthread_self());
+void *thread(void *vargs) { 
+  int connfd = (int)vargs; // argument로 받은 것을 connfd에 넣는다
+  Pthread_detach(pthread_self()); // 추가된 코드
   doit(connfd);
-  Close(connfd);
+  Close(connfd); 
+  // connfd를 여러개로 만드는 이유? main 함수 while 돌 때마다 accept 쓰레드생성함수 호출되고, 
+  // 그 생성 함수에서 쓰레드함수 호출하는데 호출할 때마다 connfd가 연결됨. (클라 여러개!)
+  // 요청받으면 쓰레드 만들고, 이 쓰레드마다 connfd를 만든다. 그러면 프로세스는 하나인데 쓰레드 여러개 - 거기서 connfd쭈루룩.
+  // 그래서 main함수가 아닌 thread함수에 doit 이 있다!
 }
 
-void doit(int connfd){
+
+void doit(int connfd){ 
   int end_serverfd; 
   char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
   char endserver_http_header[MAXLINE];
@@ -117,7 +122,9 @@ void build_http_header(char *http_header, char *hostname, char *path, int port, 
       continue;
     }
 
-    if (!strncasecmp(buf, connection_key, strlen(connection_key)) && !strncasecmp(buf, proxy_connection_key, strlen(proxy_connection_key)) && !strncasecmp(buf, user_agent_key, strlen(user_agent_key))){
+    if (!strncasecmp(buf, connection_key, strlen(connection_key)) 
+        || !strncasecmp(buf, proxy_connection_key, strlen(proxy_connection_key)) 
+        || !strncasecmp(buf, user_agent_key, strlen(user_agent_key))){
       strcat(other_hdr, buf);
     }
   }
