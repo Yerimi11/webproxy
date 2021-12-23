@@ -98,7 +98,7 @@ void doit(int fd) { /* 한 개의 HTTP 트랜잭션을 처리 */
   printf("Request headers:\n");
   printf("%s", buf); // 우리가 요청한 자료를 표준 출력 해준다 (godzilla)
   sscanf(buf, "%s %s %s", method, uri, version);
-  printf("Get image file uri : %s\n", uri); // 추가코드
+  printf("Get image file uri : %s\n", uri); // 추가코드 : echo를 사용하면 doit이 안돌아가는데, 둘 다 사용하기 위해 uri값을 한 번 더 준다.
       // 같은 문자가 아닐 때 조건문   // GET이거나 HEAD도 아닐 때 /* 숙제 11.11 */
   if (strcasecmp(method, "GET") && strcasecmp(method,  "HEAD")) { // 같으면 0반환이라 if문 안들어감 1은 true라 에러실행 // Tiny는 GET메소드만 지원. 만약 다른 메소드(like POST)를 요청하면. strcasecmp : 문자열비교.
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method"); // 에러메시지 보내고, main루틴으로 돌아온다

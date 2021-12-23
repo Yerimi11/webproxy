@@ -56,7 +56,8 @@ typedef struct
 typedef struct
 {
   cache_block cacheobjs[CACHE_OBJS_COUNT];  // ten cache blocks
-  int cache_num; // 캐시(10개) 넘버 부여
+  // int cache_num; // 캐시(10개) 넘버 부여
+  /* feedback : cache_num 사용 되는 곳 없음. 삭제해도 무방 */
 }Cache;
 
 Cache cache;
@@ -288,17 +289,31 @@ void readerAfter(int i) {
   V(&cache.cacheobjs[i].rdcntmutex);
 }
 
+// int cache_find(char *url) {
+//   int i;
+//   for (i=0; i<CACHE_OBJS_COUNT; i++) {
+//     readerPre(i); /* if문 중간에 멈출 필요 없음 */
+//     if ((cache.cacheobjs[i].isEmpty == 0) && (strcmp(url, cache.cacheobjs[i].cache_url) == 0))
+//       break;
+//     readerAfter(i);
+//   }
+//   if (i >= CACHE_OBJS_COUNT)
+//     return -1;
+//   return i;
+// }
+
+/* feedback : if문 중간에 멈출 필요 없음 */
 int cache_find(char *url) {
   int i;
-  for (i=0; i<CACHE_OBJS_COUNT; i++) {
+  for (i = 0; i < CACHE_OBJS_COUNT; i++) {
     readerPre(i);
-    if ((cache.cacheobjs[i].isEmpty == 0) && (strcmp(url, cache.cacheobjs[i].cache_url) == 0))
-      break;
+    if (cache.cacheobjs[i].isEmpty == 0 && strcmp(url, cache.cacheobjs[i].cache_url) == 0) {
+      readerAfter(i);
+      return i;
+    }
     readerAfter(i);
   }
-  if (i >= CACHE_OBJS_COUNT)
-    return -1;
-  return i;
+  return -1;
 }
 
 int cache_eviction() { // 캐시 쫒아내기
@@ -332,19 +347,32 @@ void writeAfter(int i) {
 }
 
 // update the LRU number except the new cache one
+// void cache_LRU(int index) {
+//   int i;
+//   for (i=0; i<index; i++) { // ex) 5 일때 5 이하 다 내려줌  /* feedback : index 반으로 나눌 필요 없음 */
+//     writePre(i);
+//     if (cache.cacheobjs[i].isEmpty == 0 && i != index)
+//       cache.cacheobjs[i].LRU--;
+//     writeAfter(i);
+//   }
+//   i++;
+//   for (i; i<CACHE_OBJS_COUNT; i++) { // 5부터 10 사이 수도 내려줌
+//     writePre(i);
+//     if (cache.cacheobjs[i].isEmpty == 0 && i != index) {
+//       cache.cacheobjs[i].LRU--; // 이미 찾은 애는 9999로 보냈으니 그 앞에있는 애들 인덱스 -1씩 내려준다
+//     }
+//     writeAfter(i);
+//   }
+// }
+
+/* feedback : index 반으로 나눌 필요 없음 */
 void cache_LRU(int index) {
   int i;
-  for (i=0; i<index; i++) { // ex) 5 일때 5 이하 다 내려줌
+  for (i = 0; i < CACHE_OBJS_COUNT; i++) {
+    if (i == index) { continue; }
     writePre(i);
-    if (cache.cacheobjs[i].isEmpty == 0 && i != index)
+    if (cache.cacheobjs[i].isEmpty == 0) {
       cache.cacheobjs[i].LRU--;
-    writeAfter(i);
-  }
-  i++;
-  for (i; i<CACHE_OBJS_COUNT; i++) { // 5부터 10 사이 수도 내려줌
-    writePre(i);
-    if (cache.cacheobjs[i].isEmpty == 0 && i != index) {
-      cache.cacheobjs[i].LRU--; // 이미 찾은 애는 9999로 보냈으니 그 앞에있는 애들 인덱스 -1씩 내려준다
     }
     writeAfter(i);
   }
